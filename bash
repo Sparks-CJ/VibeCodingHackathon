@@ -4,6 +4,4 @@ git push origin main
 git add templates/index.html
 git commit -m "Fix: Added index.html in templates"
 git push origin main
-git add templates/index.html
-git commit -m "Add full production index.html with chart + IntaSend"
-git push origin main
+
