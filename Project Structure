@@ -1,0 +1,9 @@
+mood-journal/
+├─ app.py
+├─ requirements.txt
+├─ .env.example
+├─ templates/
+│  └─ index.html
+└─ static/
+   ├─ style.css
+   └─ app.js
