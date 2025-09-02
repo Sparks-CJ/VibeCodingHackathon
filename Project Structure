@@ -1,9 +1,8 @@
 mood-journal/
-├─ app.py
-├─ requirements.txt
-├─ .env.example
-├─ templates/
-│  └─ index.html
-└─ static/
-   ├─ style.css
-   └─ app.js
+│── app.py # Flask backend
+│── requirements.txt # Python dependencies
+│── static/
+│ └── script.js # Frontend JS
+│── templates/
+│ └── index.html # Frontend UI
+└── schema.sql # MySQL table schema
