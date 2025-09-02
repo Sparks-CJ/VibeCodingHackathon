@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mood Journal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>🌿 Mood Journal</h1>
+    <p>Track your emotions. Discover patterns. Improve your well-being.</p>
+
+    <!-- Journal Entry Form -->
+    <form id="entryForm">
+      <label for="mood">Mood:</label>
+      <input type="text" id="mood" name="mood" placeholder="Happy, Sad, Excited..." required/>
+
+      <label for="note">Note:</label>
+      <textarea id="note" name="note" placeholder="Write about your day..." required></textarea>
+
+      <button type="submit">Save Entry</button>
+    </form>
+
+    <hr>
+
+    <!-- Entries List -->
+    <div class="entries-section">
+      <h2>📖 Your Entries</h2>
+      <ul id="entries"></ul>
+    </div>
+
+    <hr>
+
+    <!-- Mood Trends Chart -->
+    <div class="chart-section">
+      <h2>📊 Mood Trends</h2>
+      <canvas id="moodChart"></canvas>
+    </div>
+
+    <hr>
+
+    <!-- IntaSend Payment Button -->
+    <div class="payment-section">
+      <h2>💳 Unlock Premium</h2>
+      <p>Access advanced insights and unlimited journaling by upgrading.</p>
+      <button id="payButton">Pay with IntaSend</button>
+    </div>
+  </div>
+
+  <!-- Frontend JS -->
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+  <!-- IntaSend Checkout SDK -->
+  <script src="https://cdn.intasend.com/checkout/intasend-inline.js"></script>
+  <script>
+    document.getElementById("payButton").addEventListener("click", function() {
+      new window.IntaSend({
+        publicAPIKey: "YOUR_PUBLIC_KEY", // replace with your IntaSend public key
+        live: false, // change to true in production
+      }).checkout({
+        amount: 5,
+        currency: "USD",
+        email: "customer@example.com"
+      });
+    });
+  </script>
+</body>
+</html>
