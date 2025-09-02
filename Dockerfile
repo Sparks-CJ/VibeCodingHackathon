@@ -1,14 +1,17 @@
-# Use official Python image
+# Use lightweight Python base
 FROM python:3.10-slim
 
-# Set working directory
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set work directory
 WORKDIR /app
 
-# Install system dependencies
-
+# Install system dependencies for MySQL
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    default-libmysqlclient-dev build-essential && \
+    default-libmysqlclient-dev build-essential pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for caching
@@ -23,6 +26,7 @@ COPY . .
 # Expose Flask port
 EXPOSE 5000
 
-# Run the Flask app
+# Run app with Gunicorn (production server)
 CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
+
 
