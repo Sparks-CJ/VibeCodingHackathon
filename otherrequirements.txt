@@ -1,5 +1,4 @@
 flask
-flask-mysql-connector
 requests
-python-dotenv
+mysqlclient
 gunicorn
