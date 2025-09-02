@@ -1,108 +1,84 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import mysql.connector
+from flask import Flask, render_template, request, jsonify
+from flask_mysqldb import MySQL
+import MySQLdb.cursors
 import requests
-from intasend import APIService
+import os
 
 app = Flask(__name__)
-CORS(app)  # Allow frontend JS requests
 
-# ----------------------
-# Database Config
-# ----------------------
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",        # change if needed
-    password="",        # change if needed
-    database="mood_db"  # make sure this DB exists
-)
-cursor = db.cursor()
+# MySQL Config (use Render’s environment variables)
+app.config['MYSQL_HOST'] = os.getenv("MYSQL_HOST", "localhost")
+app.config['MYSQL_USER'] = os.getenv("MYSQL_USER", "root")
+app.config['MYSQL_PASSWORD'] = os.getenv("MYSQL_PASSWORD", "")
+app.config['MYSQL_DB'] = os.getenv("MYSQL_DB", "moodjournal")
 
-# ----------------------
-# Hugging Face Sentiment Analysis
-# ----------------------
+mysql = MySQL(app)
+
+# Hugging Face API
 HF_API_URL = "https://api-inference.huggingface.co/models/nlptown/bert-base-multilingual-uncased-sentiment"
-HF_HEADERS = {"Authorization": "Bearer YOUR_HUGGINGFACE_API_KEY"}
+HF_API_KEY = os.getenv("HF_API_KEY")  # set in Render
+headers = {"Authorization": f"Bearer {HF_API_KEY}"}
 
-def analyze_sentiment(text):
-    res = requests.post(HF_API_URL, headers=HF_HEADERS, json={"inputs": text})
-    if res.status_code == 200:
-        return res.json()
-    return {"error": "Sentiment analysis failed"}
+# IntaSend API
+INTASEND_API_KEY = os.getenv("INTASEND_API_KEY")
+INTASEND_URL = "https://payment.intasend.com/api/v1/checkout/"
 
-# ----------------------
-# IntaSend Setup
-# ----------------------
-intasend = APIService(
-    publishable_key="YOUR_INTASEND_PUBLISHABLE_KEY",
-    secret_key="YOUR_INTASEND_SECRET_KEY",
-    test=True  # switch to False in production
-)
+@app.route('/')
+def index():
+    return render_template("index.html")
 
-# ----------------------
-# Routes
-# ----------------------
+@app.route('/add_entry', methods=['POST'])
+def add_entry():
+    content = request.json.get("content", "")
+    if not content:
+        return jsonify({"error": "Empty journal entry"}), 400
 
-@app.route("/journal", methods=["POST"])
-def save_journal():
+    # Sentiment analysis via Hugging Face
+    response = requests.post(HF_API_URL, headers=headers, json={"inputs": content})
+    result = response.json()
+    sentiment = "neutral"
+    score = 0.0
+
+    if isinstance(result, list) and len(result) > 0:
+        label_data = result[0][0]
+        sentiment = label_data['label']
+        score = float(label_data['score'])
+
+    cursor = mysql.connection.cursor()
+    cursor.execute(
+        "INSERT INTO entries(content, sentiment, score) VALUES(%s, %s, %s)",
+        (content, sentiment, score)
+    )
+    mysql.connection.commit()
+    cursor.close()
+
+    return jsonify({"message": "Entry saved!", "sentiment": sentiment, "score": score})
+
+@app.route('/get_entries')
+def get_entries():
+    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    cursor.execute("SELECT id, content, sentiment, score, created_at FROM entries ORDER BY created_at DESC")
+    entries = cursor.fetchall()
+    cursor.close()
+    return jsonify(entries)
+
+@app.route('/pay', methods=['POST'])
+def pay():
     data = request.json
-    entry = data.get("entry")
+    amount = data.get("amount", 1)
+    email = data.get("email", "test@example.com")
 
-    # Sentiment analysis
-    sentiment = analyze_sentiment(entry)
+    payload = {
+        "public_key": INTASEND_API_KEY,
+        "amount": amount,
+        "currency": "KES",
+        "email": email,
+        "redirect_url": "https://yourapp.onrender.com"
+    }
 
-    # Extract a score or label
-    sentiment_label = str(sentiment)
+    resp = requests.post(INTASEND_URL, json=payload)
+    return jsonify(resp.json())
 
-    # Save to DB
-    cursor.execute("INSERT INTO journals (entry, sentiment) VALUES (%s, %s)", (entry, sentiment_label))
-    db.commit()
-
-    return jsonify({"message": "Journal saved", "sentiment": sentiment})
-
-@app.route("/journal", methods=["GET"])
-def get_journals():
-    cursor.execute("SELECT id, entry, sentiment, created_at FROM journals ORDER BY created_at DESC")
-    rows = cursor.fetchall()
-
-    journals = []
-    for r in rows:
-        journals.append({
-            "id": r[0],
-            "entry": r[1],
-            "sentiment": r[2],
-            "created_at": r[3].strftime("%Y-%m-%d %H:%M:%S")
-        })
-
-    return jsonify(journals)
-
-# ----------------------
-# Payment Routes
-# ----------------------
-
-@app.route("/pay", methods=["POST"])
-def initiate_payment():
-    data = request.json
-    amount = data.get("amount", 200)  # default KES 200
-    phone_number = data.get("phone_number")
-
-    res = intasend.collection.mpesa_stk_push(phone_number, amount, "Mood Journal Premium")
-    
-    return jsonify(res)
-
-@app.route("/pay/status/<checkout_id>", methods=["GET"])
-def check_status(checkout_id):
-    res = intasend.collection.get_status(checkout_id)
-    return jsonify(res)
-    import os
-app.config['MYSQL_HOST'] = os.environ.get("MYSQL_HOST")
-app.config['MYSQL_USER'] = os.environ.get("MYSQL_USER")
-app.config['MYSQL_PASSWORD'] = os.environ.get("MYSQL_PASSWORD")
-app.config['MYSQL_DB'] = os.environ.get("MYSQL_DATABASE")
-
-
-# ----------------------
-# Run App
-# ----------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
+
