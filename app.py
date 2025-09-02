@@ -1,22 +1,24 @@
 from flask import Flask, render_template, request, jsonify
-from flask_mysqldb import MySQL
-import MySQLdb.cursors
+import mysql.connector
 import requests
 import os
 
 app = Flask(__name__)
 
-# MySQL Config (use Render’s environment variables)
-app.config['MYSQL_HOST'] = os.getenv("MYSQL_HOST", "localhost")
-app.config['MYSQL_USER'] = os.getenv("MYSQL_USER", "root")
-app.config['MYSQL_PASSWORD'] = os.getenv("MYSQL_PASSWORD", "")
-app.config['MYSQL_DB'] = os.getenv("MYSQL_DB", "moodjournal")
+# MySQL Config
+db_config = {
+    "host": os.getenv("MYSQL_HOST", "localhost"),
+    "user": os.getenv("MYSQL_USER", "root"),
+    "password": os.getenv("MYSQL_PASSWORD", ""),
+    "database": os.getenv("MYSQL_DB", "moodjournal")
+}
 
-mysql = MySQL(app)
+def get_db_connection():
+    return mysql.connector.connect(**db_config)
 
 # Hugging Face API
 HF_API_URL = "https://api-inference.huggingface.co/models/nlptown/bert-base-multilingual-uncased-sentiment"
-HF_API_KEY = os.getenv("HF_API_KEY")  # set in Render
+HF_API_KEY = os.getenv("HF_API_KEY")
 headers = {"Authorization": f"Bearer {HF_API_KEY}"}
 
 # IntaSend API
@@ -33,33 +35,35 @@ def add_entry():
     if not content:
         return jsonify({"error": "Empty journal entry"}), 400
 
-    # Sentiment analysis via Hugging Face
+    # Sentiment analysis
     response = requests.post(HF_API_URL, headers=headers, json={"inputs": content})
     result = response.json()
-    sentiment = "neutral"
-    score = 0.0
-
+    sentiment, score = "neutral", 0.0
     if isinstance(result, list) and len(result) > 0:
         label_data = result[0][0]
         sentiment = label_data['label']
         score = float(label_data['score'])
 
-    cursor = mysql.connection.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO entries(content, sentiment, score) VALUES(%s, %s, %s)",
         (content, sentiment, score)
     )
-    mysql.connection.commit()
+    conn.commit()
     cursor.close()
+    conn.close()
 
     return jsonify({"message": "Entry saved!", "sentiment": sentiment, "score": score})
 
 @app.route('/get_entries')
 def get_entries():
-    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, content, sentiment, score, created_at FROM entries ORDER BY created_at DESC")
     entries = cursor.fetchall()
     cursor.close()
+    conn.close()
     return jsonify(entries)
 
 @app.route('/pay', methods=['POST'])
@@ -81,4 +85,5 @@ def pay():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
